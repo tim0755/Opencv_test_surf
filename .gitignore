@@ -4,4 +4,5 @@
 /local.properties
 *.iml
 /app/*.iml
+/app/build
 /openCVLibrary310/*.iml
