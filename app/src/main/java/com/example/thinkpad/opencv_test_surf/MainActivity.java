@@ -36,8 +36,10 @@ public class MainActivity extends AppCompatActivity {
     private static final String DIR = "/1";
     private static final String fileInputObject = DIR + "/fileInputObject.jpg";
     private static final String fileInputScene = DIR + "/fileInputScene.jpg";
+    private static final String fileOutputObject = DIR + "/fileOutputObject.jpg";
     private static final String fileOutputImage = DIR + "/fileOutputImage.jpg";
     private static final String fileOutputMatch = DIR + "/fileOutputMatch.jpg";
+    private static final String fileOutput0 = DIR + "/fileOutput0.jpg";
     private static final String fileOutput = DIR + "/fileOutput.jpg";
 
     static {
@@ -79,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
 
         Log.d(TAG, "Drawing key points on object image...");
         Features2d.drawKeypoints(objectImage, objectKeyPoints, outputImage, newKeypointColor, 0);
+        Imgcodecs.imwrite(StoragePath + fileOutputImage, outputImage);
 
         // Match object image with the scene image
         MatOfKeyPoint sceneKeyPoints = new MatOfKeyPoint();
@@ -97,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "Calculating good match list..." + matches.size() + " " + matches);
         LinkedList<DMatch> goodMatchesList = new LinkedList<DMatch>();
 
-        float nndrRatio = 0.6f;
+        float nndrRatio = 0.5f;
 
         for (int i = 0; i < matches.size(); i++) {
             MatOfDMatch matofDMatch = matches.get(i);
@@ -130,6 +133,9 @@ public class MainActivity extends AppCompatActivity {
             scnMatOfPoint2f.fromList(scenePoints);
 
             Mat homography = Calib3d.findHomography(objMatOfPoint2f, scnMatOfPoint2f, Calib3d.RANSAC, 3);
+            
+            Log.d(TAG, "homography:"+homography);
+            Log.d(TAG, ""+homography.dump());
 
             Mat obj_corners = new Mat(4, 1, CvType.CV_32FC2);
             Mat scene_corners = new Mat(4, 1, CvType.CV_32FC2);
@@ -138,6 +144,15 @@ public class MainActivity extends AppCompatActivity {
             obj_corners.put(1, 0, new double[]{objectImage.cols(), 0});
             obj_corners.put(2, 0, new double[]{objectImage.cols(), objectImage.rows()});
             obj_corners.put(3, 0, new double[]{0, objectImage.rows()});
+
+            {
+                Mat img1 = Imgcodecs.imread(StoragePath + fileInputObject);
+                Imgproc.line(img1, new Point(obj_corners.get(0, 0)), new Point(obj_corners.get(1, 0)), new Scalar(0, 255, 0), 4);
+                Imgproc.line(img1, new Point(obj_corners.get(1, 0)), new Point(obj_corners.get(2, 0)), new Scalar(0, 255, 0), 4);
+                Imgproc.line(img1, new Point(obj_corners.get(2, 0)), new Point(obj_corners.get(3, 0)), new Scalar(0, 255, 0), 4);
+                Imgproc.line(img1, new Point(obj_corners.get(3, 0)), new Point(obj_corners.get(0, 0)), new Scalar(0, 255, 0), 4);
+                Imgcodecs.imwrite(StoragePath + fileOutput0, img1);
+            }
 
             Log.d(TAG, "Transforming object corners to scene corners...");
             Core.perspectiveTransform(obj_corners, scene_corners, homography);
@@ -155,11 +170,10 @@ public class MainActivity extends AppCompatActivity {
 
             Features2d.drawMatches(objectImage, objectKeyPoints, sceneImage, sceneKeyPoints, goodMatches, matchoutput, matchestColor, newKeypointColor, new MatOfByte(), 2);
 
-            Imgcodecs.imwrite(StoragePath + fileOutputImage, outputImage);
             Imgcodecs.imwrite(StoragePath + fileOutputMatch, matchoutput);
             Imgcodecs.imwrite(StoragePath + fileOutput, img);
         } else {
-            Log.d(TAG, "Object Not Found:" + goodMatchesList.size());
+            Log.d(TAG, "Object Not Found match number just only:" + goodMatchesList.size());
         }
     }
 }
