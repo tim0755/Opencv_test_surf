@@ -35,10 +35,12 @@ public class MainActivity extends AppCompatActivity {
     private static final String StoragePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).getAbsolutePath();
     private static final String DIR = "/1";
     private static final String fileInputObject = DIR + "/fileInputObject.jpg";
+    private static final String fileInputObjectPart = DIR + "/fileInputObjectPart.jpg";
     private static final String fileInputScene = DIR + "/fileInputScene.jpg";
     private static final String fileOutputObject = DIR + "/fileOutputObject.jpg";
     private static final String fileOutputImage = DIR + "/fileOutputImage.jpg";
     private static final String fileOutputMatch = DIR + "/fileOutputMatch.jpg";
+    private static final String fileOutputMatchNew = DIR + "/fileOutputMatchNew.jpg";
     private static final String fileOutput0 = DIR + "/fileOutput0.jpg";
     private static final String fileOutput = DIR + "/fileOutput.jpg";
 
@@ -63,6 +65,11 @@ public class MainActivity extends AppCompatActivity {
 
         Mat objectImage = Imgcodecs.imread(StoragePath + fileInputObject);
         Mat sceneImage = Imgcodecs.imread(StoragePath + fileInputScene);
+
+        /*rectangeFillMat(objectImage, objectImage.get(0, 0), 0, 0, 800, 2160);
+        rectangeFillMat(objectImage, objectImage.get(0, 0), 3040, 0, 800, 2160);
+        rectangeFillMat(sceneImage, sceneImage.get(0, 0), 1100, 0, 1640, 2160);*/
+        //Imgcodecs.imwrite(StoragePath + fileInputObjectPart, objectImage);
 
         MatOfKeyPoint objectKeyPoints = new MatOfKeyPoint();
         FeatureDetector featureDetector = FeatureDetector.create(FeatureDetector.AKAZE);
@@ -102,6 +109,9 @@ public class MainActivity extends AppCompatActivity {
 
         float nndrRatio = 0.5f;
 
+        List<KeyPoint> objKeypointlist1 = objectKeyPoints.toList();
+        List<KeyPoint> scnKeypointlist2 = sceneKeyPoints.toList();
+
         for (int i = 0; i < matches.size(); i++) {
             MatOfDMatch matofDMatch = matches.get(i);
             DMatch[] dmatcharray = matofDMatch.toArray();
@@ -109,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
             DMatch m2 = dmatcharray[1];
 
             if (m1.distance <= m2.distance * nndrRatio) {
+                Point pt1 = objKeypointlist1.get(m1.queryIdx).pt;
+                Point pt2 = scnKeypointlist2.get(m1.trainIdx).pt;
+                Log.d(TAG, "match:(" + (int) pt1.x + "," + (int) pt1.y + ") to (" + (int) pt2.x + "," + (int) pt2.y + ")");
                 goodMatchesList.addLast(m1);
             }
         }
@@ -132,10 +145,35 @@ public class MainActivity extends AppCompatActivity {
             MatOfPoint2f scnMatOfPoint2f = new MatOfPoint2f();
             scnMatOfPoint2f.fromList(scenePoints);
 
-            Mat homography = Calib3d.findHomography(objMatOfPoint2f, scnMatOfPoint2f, Calib3d.RANSAC, 3);
-            
-            Log.d(TAG, "homography:"+homography);
-            Log.d(TAG, ""+homography.dump());
+            int ransacReprojThreshold = 3;
+            Mat homography = Calib3d.findHomography(objMatOfPoint2f, scnMatOfPoint2f, Calib3d.RANSAC, ransacReprojThreshold);
+
+            LinkedList<DMatch> goodMatchesListNew = new LinkedList<DMatch>();
+
+            {
+                MatOfPoint2f objMatOfPoint2fNew = new MatOfPoint2f();
+                Core.perspectiveTransform(objMatOfPoint2f, objMatOfPoint2fNew, homography);
+                Point[] objectPointsNew = objMatOfPoint2fNew.toArray();
+
+                for (int i = 0; i < goodMatchesList.size(); i++) {
+                    LinkedList<Point> scenePointsNew = new LinkedList<>();
+                    MatOfPoint2f temp1 = new MatOfPoint2f();
+                    MatOfPoint2f temp2 = new MatOfPoint2f();
+
+                    temp1.fromArray(objectPointsNew[i]);
+                    scenePointsNew.addLast(scnKeypointlist.get(goodMatchesList.get(i).trainIdx).pt);
+                    temp2.fromList(scenePointsNew);
+
+                    Log.e(TAG, "Core.norm:" + Core.norm(temp1, temp2));
+                    if (Core.norm(temp1, temp2) < ransacReprojThreshold) {
+                        goodMatchesListNew.add(goodMatchesList.get(i));
+                    }
+                }
+                Log.e(TAG, "size:" + goodMatchesList.size() + " new size:" + goodMatchesListNew.size());
+            }
+
+            Log.d(TAG, "homography:" + homography);
+            Log.d(TAG, "" + homography.dump());
 
             Mat obj_corners = new Mat(4, 1, CvType.CV_32FC2);
             Mat scene_corners = new Mat(4, 1, CvType.CV_32FC2);
@@ -171,9 +209,33 @@ public class MainActivity extends AppCompatActivity {
             Features2d.drawMatches(objectImage, objectKeyPoints, sceneImage, sceneKeyPoints, goodMatches, matchoutput, matchestColor, newKeypointColor, new MatOfByte(), 2);
 
             Imgcodecs.imwrite(StoragePath + fileOutputMatch, matchoutput);
+            {
+                MatOfDMatch goodMatchesNew = new MatOfDMatch();
+                goodMatchesNew.fromList(goodMatchesListNew);
+                Features2d.drawMatches(objectImage, objectKeyPoints, sceneImage, sceneKeyPoints, goodMatchesNew, matchoutput, matchestColor, newKeypointColor, new MatOfByte(), 2);
+                Imgcodecs.imwrite(StoragePath + fileOutputMatchNew, matchoutput);
+            }
             Imgcodecs.imwrite(StoragePath + fileOutput, img);
         } else {
-            Log.d(TAG, "Object Not Found match number just only:" + goodMatchesList.size());
+            Log.e(TAG, "Object Not Found match number just only:" + goodMatchesList.size());
         }
     }
+
+    private void rectangeFillMat(Mat src, double[] target, int x, int y, int w, int h) {
+
+        long time = System.currentTimeMillis();
+        Log.d(TAG, "rectangeFillMat!");
+        if (x + w > src.cols() || y + h > src.rows()) {
+            Log.d(TAG, "error parameters!");
+            return;
+        }
+
+        for (int i = 0; i < h; i++) {
+            for (int j = 0; j < w; j++) {
+                src.put(y + i, x + j, target);
+            }
+        }
+        Log.d(TAG, "rectangeFillMat finish! use time:" + (System.currentTimeMillis() - time));
+    }
+
 }
